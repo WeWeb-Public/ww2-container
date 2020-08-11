@@ -1,0 +1,37 @@
+{
+    "componentPath": "./src/wwObject.vue",
+    "content": {
+        "type": "ww_container",
+        "data": {}
+    },
+    "upsales": {
+        "wwAnalytics": {
+            "click": false
+        }
+    },
+    "cmsOptions": {
+        "wwObjectMenu": {
+            "items": [
+                {
+                    "name": "OPTIONS",
+                    "main": true,
+                    "text": {
+                        "en": "Options",
+                        "fr": "Options"
+                    },
+                    "icon": "wwi wwi-edit-other",
+                    "action": "edit"
+                },
+                {
+                    "name": "CONNECT",
+                    "text": {
+                        "en": "Connect to CMS collection",
+                        "fr": "Connecter à une collections CMS"
+                    },
+                    "icon": "",
+                    "action": "connectCmsCollection"
+                }
+            ]
+        }
+    }
+}
