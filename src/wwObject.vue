@@ -21,7 +21,6 @@ import makeStories from './stories';
 const wwu = window.wwLib.wwUtils;
 
 const CONTAINER_CONTENT_CHANGED = 'ww-container:content-changed';
-
 export default {
     name: '__COMPONENT_NAME__',
     props: {
@@ -34,7 +33,8 @@ export default {
             d_screens: ['lg', 'md', 'sm', 'xs'],
             cmsTemplate: {},
             editedTemplateIdx: 0,
-            isRootCmsTemplate: false
+            isRootCmsTemplate: false,
+            lastBindingUpdate: {}
             /* wwManager:end */
         };
     },
@@ -69,11 +69,6 @@ export default {
     },
     created() {
         this.initData();
-        wwLib.$on(CONTAINER_CONTENT_CHANGED, this.handleContentChanged);
-        this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
-        this.wwObjectCtrl.onEditedTemplateIndex(newIndex => {
-            this.editedTemplateIdx = newIndex;
-        });
     },
     methods: {
         initData() {
@@ -82,12 +77,12 @@ export default {
             if (!this.wwObject.content.data.options) {
                 this.wwObject.content.data.options = {
                     lg: {
-                        direction: 'column',
+                        direction: 'row',
                         reverse: false,
-                        justifyContent: 'center',
+                        justifyContent: 'space-around',
                         alignItems: 'center',
                         flexWrap: 'nowrap',
-                        minHeight: '50%'
+                        minHeight: '25%'
                     }
                 };
 
@@ -104,6 +99,10 @@ export default {
             }
         },
         /* wwManager:start */
+
+        isContainer(wwObject) {
+            return wwObject.content.type === 'ww_container';
+        },
         async edit() {
             wwLib.wwObjectHover.setLock(this);
 
@@ -121,22 +120,6 @@ export default {
 
             try {
                 const result = await wwLib.wwPopups.open(options);
-
-                /*=============================================m_ÔÔ_m=============================================\
-                  LAYOUT
-                \================================================================================================*/
-                /*
-                this.wwObject.content.data.options = {
-                    lg: {
-                        direction: 'column',
-                        reverse: false,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        flexWrap: 'nowrap',
-                        minHeight: '50%'
-                    }
-                };
-                */
 
                 if (!this.wwObject.content.data.options[this.c_screen]) {
                     this.wwObject.content.data.options[this.c_screen] = _.cloneDeep(this.wwObject.content.data.options.lg);
@@ -166,39 +149,20 @@ export default {
                     this.wwObject.content.data.options[this.c_screen].minHeight = result.minHeight;
                 }
 
-                this.wwObjectCtrl.update(this.wwObject);
+                await this.wwObjectCtrl.update(this.wwObject);
 
-                this.wwObjectCtrl.globalEdit(result);
+                await this.wwObjectCtrl.globalEdit(result);
+
+                await this.afterContentChanged();
             } catch (error) {
                 console.log(error);
             }
 
             wwLib.wwObjectHover.removeLock();
         },
-        initContentIfNecessary() {
+        initContent() {
             if (!Array.isArray(this.wwObject.content.data.wwObjects)) {
                 this.wwObject.content.data.wwObjects = [];
-            }
-        },
-        async add(options) {
-            this.initContentIfNecessary();
-            this.wwObject.content.data.wwObjects.splice(options.index, 0, options.wwObject);
-            this.afterContentChanged();
-        },
-        async remove(options) {
-            this.initContentIfNecessary();
-            this.wwObject.content.data.wwObjects.splice(options.index, 1);
-            this.afterContentChanged();
-        },
-
-        afterContentChanged() {
-            this.wwObjectCtrl.update(this.wwObject);
-            this.changeEditedTemplateIndex();
-            wwLib.$emit(CONTAINER_CONTENT_CHANGED);
-        },
-        async changeEditedTemplateIndex() {
-            if (!this.isRootCmsTemplate && this.isConnected) {
-                await this.wwObjectCtrl.setEditedTemplateIndex(this.wwObject.content.cms.bindings.index);
             }
         },
         async connectCmsCollection() {
@@ -212,58 +176,75 @@ export default {
                     collection: collection.name
                 }
             };
-            this.repeatTemplate(collection, this.cmsTemplate);
+            this.registerSubscriptionsOnRootCmsTemplate();
+            this.duplicateFirstChild(collection, this.cmsTemplate);
             this.wwObjectCtrl.update(this.wwObject);
         },
-        repeatTemplate(collection, cmsTemplate) {
+        duplicateFirstChild(collection, cmsTemplate) {
             collection.data.forEach((item, index) => {
                 const clone = index > 0 ? this.getCmsTemplateCopy(cmsTemplate) : cmsTemplate;
-                clone.content.cms = {
-                    bindings: {
-                        collection: collection.name,
-                        index
-                    }
-                };
+                if (this.isContainer(clone)) {
+                    this.bindDirectChildContainer(clone, collection.name, index);
+                }
                 if (index > 0) this.add({ wwObject: clone, index });
             });
         },
+        registerSubscriptionsOnRootCmsTemplate() {
+            this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
+            this.wwObjectCtrl.onEditedTemplateIndex(newIndex => {
+                this.editedTemplateIdx = newIndex;
+            });
+            wwLib.$on(CONTAINER_CONTENT_CHANGED, this.handleContentChanged);
+        },
+        async add(options) {
+            this.initContent();
+            this.wwObject.content.data.wwObjects.splice(options.index, 0, options.wwObject);
+            await this.afterContentChanged();
+        },
+        async remove(options) {
+            this.initContent();
+            this.wwObject.content.data.wwObjects.splice(options.index, 1);
+            await this.afterContentChanged();
+        },
+
+        async afterContentChanged() {
+            await this.wwObjectCtrl.update(this.wwObject);
+            await this.changeEditedTemplateIndex();
+            wwLib.$emit(CONTAINER_CONTENT_CHANGED);
+        },
+        async changeEditedTemplateIndex() {
+            if (!this.isRootCmsTemplate && this.isConnected) {
+                await this.wwObjectCtrl.setEditedTemplateIndex(this.wwObject.content.cms.bindings.index);
+            }
+        },
 
         async handleContentChanged() {
-            if (this.isRootCmsTemplate) {
-                this.updateCmsBoundedChildren();
-                await this.wwObjectCtrl.update(this.wwObject);
-            }
+            this.updateCmsBoundedChildren();
+            await this.wwObjectCtrl.update(this.wwObject);
+            await this.evaluateBindings(this.lastBindingUpdate);
         },
         updateCmsBoundedChildren() {
             this.cmsTemplate = this.getCmsTemplateCopy(this.wwObject.content.data.wwObjects[this.editedTemplateIdx]);
             this.wwObject.content.data.wwObjects = this.wwObject.content.data.wwObjects.map((item, index) => {
                 const clone = index === this.editedTemplateIdx ? this.cmsTemplate : this.getCmsTemplateCopy(this.cmsTemplate);
-                clone.content.cms = {
-                    bindings: {
-                        collection: this.wwObject.content.cms.bindings.collection,
-                        index
-                    }
-                };
+                if (this.isContainer(clone)) {
+                    this.bindDirectChildContainer(clone, this.wwObject.content.cms.bindings.collection, index);
+                }
                 return clone;
             });
         },
 
         async handleChildBindingChanged(bindingUpdate) {
-            // await this.changeEditedTemplateIndex();
-            if (this.isRootCmsTemplate) {
-                this.updateCmsBoundedChildren();
-                await this.wwObjectCtrl.update(this.wwObject);
-                const {
-                    cms: {
-                        bindings: { collection }
-                    },
-                    data: { wwObjects }
-                } = this.wwObject.content;
-                if (collection === bindingUpdate.collection) {
-                    this.wwObjectCtrl.evaluateBindings(wwObjects);
-                }
-                this.wwObjectCtrl.update(this.wwObject);
-            }
+            this.lastBindingUpdate = bindingUpdate;
+            this.updateCmsBoundedChildren();
+            await this.wwObjectCtrl.update(this.wwObject);
+            await this.evaluateBindings(bindingUpdate);
+        },
+
+        async evaluateBindings(bindingUpdate) {
+            if (bindingUpdate.collection === undefined) return;
+            await this.wwObjectCtrl.evaluateBindings(this.wwObject.content.data.wwObjects);
+            await this.wwObjectCtrl.update(this.wwObject);
         },
 
         getCmsTemplateCopy(templateWwObject) {
@@ -271,6 +252,14 @@ export default {
             wwu.changeUniqueIds(clone);
             clone.uniqueId = wwu.getUniqueId();
             return clone;
+        },
+        bindDirectChildContainer(child, collection, index) {
+            child.content.cms = {
+                bindings: {
+                    collection,
+                    index
+                }
+            };
         }
         /* wwManager:end */
     }
