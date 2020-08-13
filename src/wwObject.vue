@@ -66,7 +66,7 @@ export default {
             return Object(this.wwObject.content.cms) === this.wwObject.content.cms;
         },
         templateIndex() {
-            return this.isConnected ? this.wwObject.content.cms.bindings.index : -1;
+            return this.isConnected ? (this.wwObject.content.cms.bindings || {}).index : -1;
         }
         /* wwManager:end */
     },
