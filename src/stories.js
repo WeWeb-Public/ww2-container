@@ -115,7 +115,6 @@ export default ({ direction, reverse, justifyContents, alignItems, flexWrap, min
                             },
                             {
                                 value: 'center',
-                                default: true,
                                 text: {
                                     en: 'Center',
                                     fr: 'Millieu'
@@ -130,6 +129,7 @@ export default ({ direction, reverse, justifyContents, alignItems, flexWrap, min
                             },
                             {
                                 value: 'space-between',
+                                default: true,
                                 text: {
                                     en: 'Space between elements',
                                     fr: 'Espace entre les élements'
