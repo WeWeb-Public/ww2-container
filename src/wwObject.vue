@@ -204,9 +204,7 @@ export default {
         duplicateFirstChild(collection, cmsTemplate) {
             collection.data.forEach((item, index) => {
                 const clone = index > 0 ? this.getCmsTemplateCopy(cmsTemplate) : cmsTemplate;
-                if (this.isContainer(clone)) {
-                    this.bindDirectChildContainer(clone, collection.name, index);
-                }
+                this.bindDirectChild(clone, collection.name, index);
                 if (index > 0) this.add({ wwObject: clone, index });
             });
         },
@@ -221,9 +219,7 @@ export default {
             this.cmsTemplate = this.getCmsTemplateCopy(templateChild);
             this.wwObject.content.data.wwObjects = this.wwObject.content.data.wwObjects.map((item, index) => {
                 const clone = index === editedTemplateIndex ? this.cmsTemplate : this.getCmsTemplateCopy(this.cmsTemplate);
-                if (this.isContainer(clone)) {
-                    this.bindDirectChildContainer(clone, this.wwObject.content.cms.bindings.collection, index);
-                }
+                this.bindDirectChild(clone, this.wwObject.content.cms.bindings.collection, index);
                 return clone;
             });
         },
@@ -241,7 +237,7 @@ export default {
             const rootContainerId = this.wwObject.uniqueId;
             const { wwObjects } = this.wwObject.content.data;
             await this.wwObjectCtrl.evaluateBindings({ rootContainerId, wwObjects });
-            await this.wwObjectCtrl.update(this.wwObject);
+            if (this.isConnected) await this.wwObjectCtrl.update(this.wwObject);
         },
 
         getCmsTemplateCopy(templateWwObject) {
@@ -250,8 +246,9 @@ export default {
             clone.uniqueId = wwu.getUniqueId();
             return clone;
         },
-        bindDirectChildContainer(child, collection, index) {
+        bindDirectChild(child, collection, index) {
             child.content.cms = {
+                ...child.content.cms,
                 bindings: {
                     collection,
                     index
