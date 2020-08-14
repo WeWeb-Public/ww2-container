@@ -32,9 +32,7 @@ export default {
             /* wwManager:start */
             d_screens: ['lg', 'md', 'sm', 'xs'],
             cmsTemplate: {},
-            editedTemplateIdx: 0,
-            lastBindingUpdate: {},
-            rendering: 0
+            editedTemplateIdx: 0
             /* wwManager:end */
         };
     },
@@ -112,13 +110,13 @@ export default {
         },
         /* wwManager:start */
         async configure() {
-            console.log(this.wwObject.uniqueId, this.wwObject.content.cms);
-            const collection = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
+            const collectionDescriptor = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
             const wwObject = this.wwObjectCtrl.getWwObjectById(this.wwObject.uniqueId);
             await this.wwObjectCtrl.addCmsBoundedContainer(wwObject);
-            this.configureRootCmsTemplate(collection);
-            this.duplicateFirstChild(collection);
-            await this.wwObjectCtrl.update(this.wwObject);
+            this.updateRootCmsTemplate(collectionDescriptor);
+            const updatedWwObject = this.wwObjectCtrl.evaluateBindings({ rootContainerId: this.wwObject.uniqueId });
+            await this.wwObjectCtrl.update(updatedWwObject);
+            this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
         },
 
         isContainer(wwObject) {
@@ -202,35 +200,34 @@ export default {
         },
         async connectCmsCollection() {
             const {
-                bindings: { collection }
+                bindings: { collectionDescriptor }
             } = await this.wwObjectCtrl.connectCmsCollection();
-            this.configureRootCmsTemplate(collection.name);
-            this.duplicateFirstChild(collection, this.cmsTemplate);
+            this.updateRootCmsTemplate(collectionDescriptor);
+            this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
             this.wwObjectCtrl.update(this.wwObject);
         },
-        configureRootCmsTemplate(collection) {
-            const cmsTemplate = this.wwObject.content.data.wwObjects[this.editedTemplateIdx].uniqueId;
-            this.cmsTemplate = this.getCmsTemplateCopy(this.wwObjectCtrl.getWwObjectById(cmsTemplate));
+        updateRootCmsTemplate(collectionDescriptor) {
+            const cmsTemplateId = this.wwObject.content.data.wwObjects[this.editedTemplateIdx].uniqueId;
+            this.cmsTemplate = this.getCmsTemplateCopy(this.wwObjectCtrl.getWwObjectById(cmsTemplateId));
             this.wwObject.content.cms = {
                 bindings: {
-                    collection
+                    collection: collectionDescriptor.name
                 }
             };
-            this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
-        },
-        duplicateFirstChild(collection, cmsTemplate) {
-            this.wwObject.content.data.wwObjects = collection.data.map((item, index) => {
-                const clone = index === this.editedTemplateIdx ? cmsTemplate : this.getCmsTemplateCopy(cmsTemplate);
-                this.bindDirectChild(clone, collection.name, index);
+            this.wwObject.content.data.wwObjects = collectionDescriptor.data.map((item, index) => {
+                const clone = index === this.editedTemplateIdx ? this.cmsTemplate : this.getCmsTemplateCopy(this.cmsTemplate);
+                this.bindDirectChild(clone, collectionDescriptor.name, index);
                 return clone;
             });
         },
         async handleContentChanged(editedTemplateIndex) {
-            this.updateCmsBoundedChildren(editedTemplateIndex);
+            this.updateBoundedChildren(editedTemplateIndex);
             await this.wwObjectCtrl.update(this.wwObject);
-            if (this.isRootCmsTemplate) await this.evaluateBindings();
+            const wwObjects = await this.evaluateChildBindings();
+            this.wwObject.content.data.wwObjects = wwObjects;
+            await this.wwObjectCtrl.update(this.wwObject);
         },
-        updateCmsBoundedChildren(editedTemplateIndex) {
+        updateBoundedChildren(editedTemplateIndex) {
             const templateChild = this.wwObject.content.data.wwObjects[editedTemplateIndex];
             if (templateChild === undefined || !this.isConnected) return;
             this.cmsTemplate = this.getCmsTemplateCopy(templateChild);
@@ -243,18 +240,17 @@ export default {
 
         async handleChildBindingChanged(bindingUpdate) {
             if (this.wwObject.uniqueId !== bindingUpdate.rootContainerId) return;
-            this.lastBindingUpdate = bindingUpdate;
             const { editedTemplateIndex } = bindingUpdate;
-            this.updateCmsBoundedChildren(editedTemplateIndex);
+            this.updateBoundedChildren(editedTemplateIndex);
+            const wwObjects = await this.evaluateChildBindings();
+            this.wwObject.content.data.wwObjects = wwObjects;
             await this.wwObjectCtrl.update(this.wwObject);
-            if (this.isConnected) await this.evaluateBindings();
         },
 
-        async evaluateBindings() {
+        async evaluateChildBindings() {
             const rootContainerId = this.wwObject.uniqueId;
             const { wwObjects } = this.wwObject.content.data;
-            await this.wwObjectCtrl.evaluateBindings({ rootContainerId, wwObjects });
-            await this.wwObjectCtrl.update(this.wwObject);
+            return this.wwObjectCtrl.evaluateChildBindings({ rootContainerId, wwObjects });
         },
 
         getCmsTemplateCopy(templateWwObject) {
