@@ -33,8 +33,8 @@ export default {
             d_screens: ['lg', 'md', 'sm', 'xs'],
             cmsTemplate: {},
             editedTemplateIdx: 0,
-            isRootCmsTemplate: false,
-            lastBindingUpdate: {}
+            lastBindingUpdate: {},
+            rendering: 0
             /* wwManager:end */
         };
     },
@@ -63,15 +63,23 @@ export default {
             return {};
         },
         isConnected() {
-            return Object(this.wwObject.content.cms) === this.wwObject.content.cms;
+            const { cms } = this.wwObject.content;
+            return Object(cms) === cms && Object(cms.bindings) === cms.bindings;
+        },
+        isRootCmsTemplate() {
+            const { cms } = this.wwObject.content;
+            return this.isConnected && cms.bindings.collection && !('index' in cms.bindings);
         },
         templateIndex() {
-            return this.isConnected ? (this.wwObject.content.cms.bindings || {}).index : -1;
+            return this.isConnected ? this.wwObject.content.cms.bindings.index : -1;
         }
         /* wwManager:end */
     },
     created() {
         this.initData();
+        if (this.isRootCmsTemplate) {
+            this.configure();
+        }
         wwLib.$on(CONTAINER_CONTENT_CHANGED, this.handleContentChanged);
     },
     methods: {
@@ -103,6 +111,15 @@ export default {
             }
         },
         /* wwManager:start */
+        async configure() {
+            console.log(this.wwObject.uniqueId, this.wwObject.content.cms);
+            const collection = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
+            const wwObject = this.wwObjectCtrl.getWwObjectById(this.wwObject.uniqueId);
+            await this.wwObjectCtrl.addCmsBoundedContainer(this.wwObject);
+            this.cmsTemplate = this.getCmsTemplateCopy(this.wwObjectCtrl.getWwObjectById(wwObject.content.data.wwObjects[0].uniqueId));
+            this.duplicateFirstChild(collection, this.cmsTemplate);
+            await this.wwObjectCtrl.update(this.wwObject);
+        },
 
         isContainer(wwObject) {
             return wwObject.content.type === 'ww_container';
@@ -193,7 +210,6 @@ export default {
         },
         configureRootCmsTemplate(collection) {
             this.cmsTemplate = this.getCmsTemplateCopy(this.wwObject.content.data.wwObjects[this.editedTemplateIdx]);
-            this.isRootCmsTemplate = true;
             this.wwObject.content.cms = {
                 bindings: {
                     collection
@@ -202,16 +218,16 @@ export default {
             this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
         },
         duplicateFirstChild(collection, cmsTemplate) {
-            collection.data.forEach((item, index) => {
-                const clone = index > 0 ? this.getCmsTemplateCopy(cmsTemplate) : cmsTemplate;
+            this.wwObject.content.data.wwObjects = collection.data.map((item, index) => {
+                const clone = index === this.editedTemplateIdx ? cmsTemplate : this.getCmsTemplateCopy(cmsTemplate);
                 this.bindDirectChild(clone, collection.name, index);
-                if (index > 0) this.add({ wwObject: clone, index });
+                return clone;
             });
         },
         async handleContentChanged(editedTemplateIndex) {
             this.updateCmsBoundedChildren(editedTemplateIndex);
             await this.wwObjectCtrl.update(this.wwObject);
-            await this.evaluateBindings();
+            if (this.isRootCmsTemplate) await this.evaluateBindings();
         },
         updateCmsBoundedChildren(editedTemplateIndex) {
             const templateChild = this.wwObject.content.data.wwObjects[editedTemplateIndex];
@@ -237,7 +253,7 @@ export default {
             const rootContainerId = this.wwObject.uniqueId;
             const { wwObjects } = this.wwObject.content.data;
             await this.wwObjectCtrl.evaluateBindings({ rootContainerId, wwObjects });
-            if (this.isConnected) await this.wwObjectCtrl.update(this.wwObject);
+            await this.wwObjectCtrl.update(this.wwObject);
         },
 
         getCmsTemplateCopy(templateWwObject) {
