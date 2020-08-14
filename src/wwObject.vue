@@ -115,9 +115,9 @@ export default {
             console.log(this.wwObject.uniqueId, this.wwObject.content.cms);
             const collection = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
             const wwObject = this.wwObjectCtrl.getWwObjectById(this.wwObject.uniqueId);
-            await this.wwObjectCtrl.addCmsBoundedContainer(this.wwObject);
-            this.cmsTemplate = this.getCmsTemplateCopy(this.wwObjectCtrl.getWwObjectById(wwObject.content.data.wwObjects[0].uniqueId));
-            this.duplicateFirstChild(collection, this.cmsTemplate);
+            await this.wwObjectCtrl.addCmsBoundedContainer(wwObject);
+            this.configureRootCmsTemplate(collection);
+            this.duplicateFirstChild(collection);
             await this.wwObjectCtrl.update(this.wwObject);
         },
 
@@ -209,7 +209,8 @@ export default {
             this.wwObjectCtrl.update(this.wwObject);
         },
         configureRootCmsTemplate(collection) {
-            this.cmsTemplate = this.getCmsTemplateCopy(this.wwObject.content.data.wwObjects[this.editedTemplateIdx]);
+            const cmsTemplate = this.wwObject.content.data.wwObjects[this.editedTemplateIdx].uniqueId;
+            this.cmsTemplate = this.getCmsTemplateCopy(this.wwObjectCtrl.getWwObjectById(cmsTemplate));
             this.wwObject.content.cms = {
                 bindings: {
                     collection
