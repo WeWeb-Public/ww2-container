@@ -112,7 +112,7 @@ export default {
         initDataBindings() {
             if (this.isRootCmsTemplate) {
                 this.updateSavedBoundedChildren();
-                this.wwObjectCtrl.onBindingContextUpdate(this.handleChildBindingChanged);
+                this.wwObjectCtrl.onBindingContextUpdate(this.handleBindingContextChanged);
             }
         },
         /* wwManager:start */
@@ -206,8 +206,6 @@ export default {
         },
         async updateSavedBoundedChildren() {
             const collectionDescriptor = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
-            const wwObject = this.wwObjectCtrl.getWwObjectById(this.wwObject.uniqueId);
-            await this.wwObjectCtrl.addCmsBoundedContainer(wwObject);
             this.updateRootCmsTemplate(collectionDescriptor);
             const updatedWwObject = this.wwObjectCtrl.evaluateBindings(this.wwObject.uniqueId);
             await this.wwObjectCtrl.update(updatedWwObject);
@@ -218,7 +216,7 @@ export default {
                 bindings: { collectionDescriptor }
             } = await this.wwObjectCtrl.connectCmsCollection();
             this.updateRootCmsTemplate(collectionDescriptor);
-            this.wwObjectCtrl.onBindingContextUpdate(this.handleChildBindingChanged);
+            this.wwObjectCtrl.onBindingContextUpdate(this.handleBindingContextChanged);
             this.wwObjectCtrl.update(this.wwObject);
         },
         updateRootCmsTemplate(collectionDescriptor) {
@@ -236,9 +234,11 @@ export default {
             });
         },
         async handleContentChanged(editedTemplateIndex) {
-            this.updateUnsavedBoundedChildren(editedTemplateIndex);
-            await this.wwObjectCtrl.update(this.wwObject);
-            await this.evaluateChildBindings();
+            if (this.isRootCmsTemplate) {
+                this.updateUnsavedBoundedChildren(editedTemplateIndex);
+                await this.wwObjectCtrl.update(this.wwObject);
+                await this.evaluateChildBindings();
+            }
         },
         updateUnsavedBoundedChildren(editedTemplateIndex) {
             const templateChild = this.wwObject.content.data.wwObjects[editedTemplateIndex];
@@ -251,7 +251,7 @@ export default {
             });
         },
 
-        async handleChildBindingChanged(bindingUpdate) {
+        async handleBindingContextChanged(bindingUpdate) {
             if (this.wwObject.uniqueId !== bindingUpdate.rootContainerId) return;
             const { editedTemplateIndex } = bindingUpdate;
             this.updateUnsavedBoundedChildren(editedTemplateIndex);
