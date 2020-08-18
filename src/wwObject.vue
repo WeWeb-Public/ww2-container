@@ -75,12 +75,13 @@ export default {
     },
     created() {
         this.initData();
-        if (this.isRootCmsTemplate) {
-            this.configure();
-        }
+        this.initDataBindings();
         wwLib.$on(CONTAINER_CONTENT_CHANGED, this.handleContentChanged);
     },
     methods: {
+        isContainer(wwObject) {
+            return wwObject.content.type === 'ww_container';
+        },
         initData() {
             //Init objects
             let needUpdate = false;
@@ -108,20 +109,12 @@ export default {
                 this.wwObjectCtrl.update(this.wwObject);
             }
         },
+        initDataBindings() {
+            if (this.isRootCmsTemplate) {
+                this.updateSavedBoundedChildren();
+            }
+        },
         /* wwManager:start */
-        async configure() {
-            const collectionDescriptor = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
-            const wwObject = this.wwObjectCtrl.getWwObjectById(this.wwObject.uniqueId);
-            await this.wwObjectCtrl.addCmsBoundedContainer(wwObject);
-            this.updateRootCmsTemplate(collectionDescriptor);
-            const updatedWwObject = this.wwObjectCtrl.evaluateBindings({ rootContainerId: this.wwObject.uniqueId });
-            await this.wwObjectCtrl.update(updatedWwObject);
-            this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
-        },
-
-        isContainer(wwObject) {
-            return wwObject.content.type === 'ww_container';
-        },
         async edit() {
             wwLib.wwObjectHover.setLock(this);
 
@@ -189,15 +182,25 @@ export default {
             this.wwObject.content.data.wwObjects.splice(options.index, 1);
             await this.afterContentChanged();
         },
+        async afterContentChanged() {
+            await this.wwObjectCtrl.update(this.wwObject);
+            wwLib.$emit(CONTAINER_CONTENT_CHANGED, !this.isRootCmsTemplate && this.isConnected ? this.wwObject.content.cms.bindings.index : 0);
+        },
         initContent() {
             if (!Array.isArray(this.wwObject.content.data.wwObjects)) {
                 this.wwObject.content.data.wwObjects = [];
             }
         },
-        async afterContentChanged() {
-            await this.wwObjectCtrl.update(this.wwObject);
-            wwLib.$emit(CONTAINER_CONTENT_CHANGED, !this.isRootCmsTemplate && this.isConnected ? this.wwObject.content.cms.bindings.index : 0);
+        async updateSavedBoundedChildren() {
+            const collectionDescriptor = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
+            const wwObject = this.wwObjectCtrl.getWwObjectById(this.wwObject.uniqueId);
+            await this.wwObjectCtrl.addCmsBoundedContainer(wwObject);
+            this.updateRootCmsTemplate(collectionDescriptor);
+            const updatedWwObject = this.wwObjectCtrl.evaluateBindings(this.wwObject.uniqueId);
+            await this.wwObjectCtrl.update(updatedWwObject);
+            this.wwObjectCtrl.onChildBindingUpdate(this.handleChildBindingChanged);
         },
+
         async connectCmsCollection() {
             const {
                 bindings: { collectionDescriptor }
@@ -221,13 +224,11 @@ export default {
             });
         },
         async handleContentChanged(editedTemplateIndex) {
-            this.updateBoundedChildren(editedTemplateIndex);
+            this.updateUnsavedBoundedChildren(editedTemplateIndex);
             await this.wwObjectCtrl.update(this.wwObject);
-            const wwObjects = await this.evaluateChildBindings();
-            this.wwObject.content.data.wwObjects = wwObjects;
-            await this.wwObjectCtrl.update(this.wwObject);
+            await this.evaluateChildBindings();
         },
-        updateBoundedChildren(editedTemplateIndex) {
+        updateUnsavedBoundedChildren(editedTemplateIndex) {
             const templateChild = this.wwObject.content.data.wwObjects[editedTemplateIndex];
             if (templateChild === undefined || !this.isConnected) return;
             this.cmsTemplate = this.getCmsTemplateCopy(templateChild);
@@ -241,16 +242,18 @@ export default {
         async handleChildBindingChanged(bindingUpdate) {
             if (this.wwObject.uniqueId !== bindingUpdate.rootContainerId) return;
             const { editedTemplateIndex } = bindingUpdate;
-            this.updateBoundedChildren(editedTemplateIndex);
-            const wwObjects = await this.evaluateChildBindings();
-            this.wwObject.content.data.wwObjects = wwObjects;
+            this.updateUnsavedBoundedChildren(editedTemplateIndex);
             await this.wwObjectCtrl.update(this.wwObject);
+            await this.evaluateChildBindings();
         },
 
         async evaluateChildBindings() {
-            const rootContainerId = this.wwObject.uniqueId;
             const { wwObjects } = this.wwObject.content.data;
-            return this.wwObjectCtrl.evaluateChildBindings({ rootContainerId, wwObjects });
+            const updateContainers = wwObjects.map(wwObject => {
+                return this.wwObjectCtrl.evaluateBindings(wwObject.uniqueId);
+            });
+            this.wwObject.content.data.wwObjects = updateContainers;
+            await this.wwObjectCtrl.update(this.wwObject);
         },
 
         getCmsTemplateCopy(templateWwObject) {
