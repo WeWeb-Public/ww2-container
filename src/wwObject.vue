@@ -5,7 +5,7 @@
 <!-- This is your HTML -->
 <template>
     <div class="ww-container" v-style="c_style">
-        <wwLayout :options="wwObject.content.data.options" tag="div" :ww-list="wwObject.content.data.wwObjects" class="wwobjects-wrapper" @ww-add="add($event)" @ww-remove="remove($event)" @refresh-bindings="handleContentChanged">
+        <wwLayout :options="wwObject.content.data.options" tag="div" :ww-list="wwObject.content.data.wwObjects" class="wwobjects-wrapper" @ww-add="add($event)" @ww-remove="remove($event)">
             <wwObject v-for="wwObject in wwObject.content.data.wwObjects" :key="wwObject.uniqueId" :ww-object="wwObject"></wwObject>
         </wwLayout>
     </div>
@@ -69,7 +69,7 @@ export default {
             return this.isConnected && cms.bindings.collection && !('index' in cms.bindings);
         },
         templateIndex() {
-            return this.isConnected ? this.wwObject.content.cms.bindings.index : -1;
+            return this.isConnected && !this.isRootCmsTemplate ? this.wwObject.content.cms.bindings.index : -1;
         }
         /* wwManager:end */
     },
@@ -109,13 +109,14 @@ export default {
                 this.wwObjectCtrl.update(this.wwObject);
             }
         },
+        /* wwManager:start */
         initDataBindings() {
             if (this.isRootCmsTemplate) {
                 this.updateSavedBoundedChildren();
                 this.wwObjectCtrl.onBindingContextUpdate(this.handleBindingContextChanged);
             }
         },
-        /* wwManager:start */
+
         async edit() {
             wwLib.wwObjectHover.setLock(this);
 
@@ -174,19 +175,17 @@ export default {
             wwLib.wwObjectHover.removeLock();
         },
         async add(options) {
-            this.initContent();
             this.wwObject.content.data.wwObjects.splice(options.index, 0, options.wwObject);
             await this.afterContentChanged();
         },
         async remove(options) {
-            this.initContent();
             this.wwObject.content.data.wwObjects.splice(options.index, 1);
             await this.afterContentChanged();
         },
         findNearestConnectedContainer() {
             let parent = this;
             while (parent) {
-                if (parent.isConnected && this.isContainer(parent.wwObject)) {
+                if (parent.isConnected) {
                     break;
                 }
                 parent = parent.$parent;
@@ -199,11 +198,7 @@ export default {
             const { cms } = parentConnectedContainer.wwObject.content;
             wwLib.$emit(CONTAINER_CONTENT_CHANGED, cms.bindings.index);
         },
-        initContent() {
-            if (!Array.isArray(this.wwObject.content.data.wwObjects)) {
-                this.wwObject.content.data.wwObjects = [];
-            }
-        },
+
         async updateSavedBoundedChildren() {
             const collectionDescriptor = this.wwObjectCtrl.getCmsCollection(this.wwObject.content.cms.bindings.collection);
             this.updateRootCmsTemplate(collectionDescriptor);
@@ -261,10 +256,10 @@ export default {
 
         async evaluateChildBindings() {
             const { wwObjects } = this.wwObject.content.data;
-            const updateContainers = wwObjects.map(wwObject => {
+            const updatedContainers = wwObjects.map(wwObject => {
                 return this.wwObjectCtrl.evaluateBindings(wwObject.uniqueId);
             });
-            this.wwObject.content.data.wwObjects = updateContainers;
+            this.wwObject.content.data.wwObjects = updatedContainers;
             await this.wwObjectCtrl.update(this.wwObject);
         },
 
